@@ -257,8 +257,8 @@ class QASystem:
             validation_split=validation_split
         )
         
-        # Save model
-        self.model.save(os.path.join(self.model_dir, 'qa_model'))
+        # Save model - FIX: Add .keras extension to the model file name
+        self.model.save(os.path.join(self.model_dir, 'qa_model.keras'))
         
         return self.model, history
     
@@ -274,8 +274,8 @@ class QASystem:
             with open(os.path.join(self.model_dir, 'tokenizer.pickle'), 'rb') as handle:
                 self.tokenizer = pickle.load(handle)
             
-            # Load model
-            model_path = os.path.join(self.model_dir, 'qa_model')
+            # Load model - FIX: Look for file with .keras extension
+            model_path = os.path.join(self.model_dir, 'qa_model.keras')
             if os.path.exists(model_path):
                 self.model = tf.keras.models.load_model(model_path)
                 return True
