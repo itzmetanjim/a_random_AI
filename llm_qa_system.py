@@ -170,6 +170,10 @@ class QASystem:
         
         # Pad sequences
         padded_inputs = pad_sequences(input_sequences, maxlen=self.max_sequence_length, padding='post')
+        
+        # For output, we need to reshape to match the expected shape for sparse_categorical_crossentropy
+        # Instead of having a sequence of token IDs, we need a sequence of one-hot indices
+        # First pad the sequences
         padded_outputs = pad_sequences(output_sequences, maxlen=self.max_sequence_length, padding='post')
         
         # Save tokenizer
@@ -199,20 +203,20 @@ class QASystem:
         lstm_layer1 = Bidirectional(LSTM(256, return_sequences=True))(embedding_layer)
         dropout1 = Dropout(0.2)(lstm_layer1)
         
-        lstm_layer2 = Bidirectional(LSTM(128))(dropout1)
+        lstm_layer2 = Bidirectional(LSTM(128, return_sequences=True))(dropout1)  # Changed to return_sequences=True
         dropout2 = Dropout(0.2)(lstm_layer2)
         
-        # Dense layers
+        # Dense layers for sequence output
         dense1 = Dense(256, activation='relu')(dropout2)
         dropout3 = Dropout(0.2)(dense1)
         
-        # Output layer
+        # Output layer - TimeDistributed Dense for sequence-to-sequence prediction
         output_layer = Dense(self.vocab_size, activation='softmax')(dropout3)
         
         # Create model
         model = Model(inputs=input_layer, outputs=output_layer)
         
-        # Compile model
+        # Compile model with categorical_crossentropy for sequence-to-sequence
         model.compile(
             optimizer='adam',
             loss='sparse_categorical_crossentropy',
@@ -240,10 +244,14 @@ class QASystem:
         # Build model
         self.model = self.build_model()
         
+        # Reshape outputs to match expected shape for sparse_categorical_crossentropy
+        # For sparse_categorical_crossentropy with sequence data, we need shape (batch, seq_len, 1)
+        reshaped_outputs = outputs.reshape(outputs.shape[0], outputs.shape[1], 1)
+        
         # Train model
         history = self.model.fit(
             inputs,
-            outputs,
+            reshaped_outputs,  # Using reshaped output
             epochs=epochs,
             batch_size=batch_size,
             validation_split=validation_split
@@ -341,15 +349,15 @@ class QASystem:
         padded_input = pad_sequences(input_sequence, maxlen=self.max_sequence_length, padding='post')
         
         # Get prediction
-        prediction = self.model.predict(padded_input)[0]
+        prediction = self.model.predict(padded_input)
         
-        # Convert prediction to text
-        # Get top predicted token indices
-        top_indices = np.argsort(prediction)[-20:]  # Take top 20 tokens
+        # prediction is now [batch_size, sequence_length, vocab_size]
+        # Get the most likely token at each position
+        predicted_sequence = np.argmax(prediction[0], axis=-1)
         
         # Convert indices to words
         index_to_word = {v: k for k, v in self.tokenizer.word_index.items()}
-        answer_words = [index_to_word.get(i, "") for i in top_indices if i > 0]
+        answer_words = [index_to_word.get(i, "") for i in predicted_sequence if i > 0]
         
         # Filter out empty words and join
         answer = " ".join([w for w in answer_words if w])
